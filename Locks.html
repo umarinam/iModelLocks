@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>iModel Locks Viewer / Releaser (per Briefcase)</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap");
+
+    :root {
+      --bg: #f3f1ea;
+      --bg-2: #ece5d9;
+      --card: #fff9ef;
+      --ink: #1f1d1a;
+      --muted: #5e5a54;
+      --line: #d9cdb9;
+      --accent: #0a6a62;
+      --accent-2: #c65b2b;
+      --danger: #a83b3b;
+      --glow: rgba(10, 106, 98, 0.2);
+    }
+
+    body {
+      font-family: "Space Grotesk", system-ui, sans-serif;
+      margin: 24px;
+      color: var(--ink);
+      background: radial-gradient(1200px 600px at 10% 0%, var(--bg-2), var(--bg));
+    }
+    .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    label { display: block; font-size: 12px; letter-spacing: 0.02em; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; }
+    input[type="text"], textarea, select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      background: #fffdf7;
+      color: var(--ink);
+      box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.04);
+    }
+    textarea { min-height: 220px; resize: vertical; }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      margin-top: 16px;
+      background: var(--card);
+      box-shadow: 0 10px 30px rgba(31, 29, 26, 0.08);
+      opacity: 0;
+      transform: translateY(10px) scale(0.99);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+    .card.reveal {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    .card.reveal:nth-of-type(1) { transition-delay: 0ms; }
+    .card.reveal:nth-of-type(2) { transition-delay: 60ms; }
+    .card.reveal:nth-of-type(3) { transition-delay: 120ms; }
+    .card.reveal:nth-of-type(4) { transition-delay: 180ms; }
+    .card.reveal:nth-of-type(5) { transition-delay: 240ms; }
+    .card.reveal:nth-of-type(6) { transition-delay: 300ms; }
+    .col { flex: 1 1 320px; }
+    button {
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #fff7ea;
+      cursor: pointer;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--ink);
+      transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+    button.primary {
+      background: linear-gradient(135deg, #0a6a62, #0b8a7f);
+      border-color: #0a6a62;
+      color: #fff;
+      box-shadow: 0 10px 20px var(--glow);
+    }
+    button.danger { background: linear-gradient(135deg, #c45454, #a83b3b); border-color: #a83b3b; color: #fff; }
+    button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(31, 29, 26, 0.18); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.5; margin-top: 8px; }
+    .status { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; white-space: pre-wrap; }
+    .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #efe4d2; font-size: 12px; border: 1px solid var(--line); }
+    .topbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+    .warn { color:#7a3b00; background:#fff2e0; border:1px solid #f0d1a6; padding:12px 14px; border-radius:12px; }
+    h2 { font-size: 22px; letter-spacing: 0.02em; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h2 style="margin:0">iModel Locks (per Briefcase)</h2>
+    <span class="pill">Uses iModels v2: GET /imodels/{id}/locks, PATCH /imodels/{id}/locks</span>
+  </div>
+
+  <div class="card warn">
+    <b>Security note:</b> This page handles your OAuth access token. Use only on a trusted machine and avoid sharing screenshots/logs.
+  </div>
+
+  <div class="card">
+    <div class="row" style="align-items:flex-start">
+      <div class="col">
+        <label>Access Token (Bearer)</label>
+        <input id="token" type="text" placeholder="eyJhbGciOi..." />
+        <div class="hint">Required scope: <code>itwin-platform</code>. To release locks you typically need <code>imodels_manage</code>. You can get an access token at: <a href="https://developer.bentley.com/apis/imodels-v2/operations/update-imodel-locks/" target="_blank" rel="noreferrer">iModels v2 Update Locks</a>.</div>
+      </div>
+      <div class="col">
+        <label>iModel Id</label>
+        <input id="imodelId" type="text" placeholder="5e19bee0-3aea-4355-a9f0-c6df9989ee7d" />
+        <div class="hint">UUID of the iModel. </div>
+      </div>
+      <div style="flex:0 0 auto; align-self:flex-end">
+        <button id="btnLoad" class="primary">Load Locks</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div class="col">
+        <label>Briefcase Id</label>
+        <select id="briefcaseSelect" disabled>
+          <option value="">(load locks first)</option>
+        </select>
+        <div class="hint">Populated from <code>locks[].briefcaseId</code></div>
+      </div>
+
+      <div style="flex: 1 1 320px">
+        <label>Mode</label>
+        <select id="mode" disabled>
+          <option value="release">Release all locks for selected briefcase (set lockLevel = "none")</option>
+          <option value="releaseExclusive">Release exclusive locks only (set lockLevel = "none" for exclusive objects)</option>
+          <option value="raw">Edit raw request body</option>
+        </select>
+        <div class="hint">PATCH body supports <code>briefcaseId</code>, optional <code>changesetId</code>, and <code>lockedObjects[]</code></div>
+      </div>
+
+      <div style="flex:0 0 auto">
+        <button id="btnPatch" class="danger" disabled>Send Update (PATCH)</button>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <label>Request Body (editable)</label>
+      <textarea id="payload" spellcheck="false" placeholder="{ ... }"></textarea>
+      <div class="hint">
+        Default “Release” payload groups object ids by lockLevel and sets all to <code>"none"</code>.
+        Response for GET shows <code>locks[].lockedObjects[].lockLevel</code> and <code>objectIds</code>.
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <label>Briefcase Details / Owner</label>
+      <div id="briefcaseInfo" class="status">(load locks to fetch briefcase details)</div>
+      <div class="hint">Briefcase details and user info are fetched from iModels v2 briefcase/user endpoints.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div class="col">
+        <label>Status / Log</label>
+        <div id="log" class="status">Ready.</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const el = (id) => document.getElementById(id);
+
+  const tokenEl = el("token");
+  const imodelIdEl = el("imodelId");
+  const btnLoad = el("btnLoad");
+  const briefcaseSelect = el("briefcaseSelect");
+  const payloadEl = el("payload");
+  const btnPatch = el("btnPatch");
+  const modeEl = el("mode");
+  const logEl = el("log");
+  const briefcaseInfoEl = el("briefcaseInfo");
+
+  const STORAGE_KEY_TOKEN = "locksViewer.accessToken";
+  const STORAGE_KEY_IMODEL = "locksViewer.imodelId";
+
+  // Stored GET result: Map briefcaseId -> lock object
+  let locksByBriefcase = new Map();
+  // Stored briefcase details and owner user details
+  let briefcaseDetailsById = new Map();
+  let briefcaseOwnerById = new Map();
+
+  function log(msg) {
+    const ts = new Date().toISOString();
+    logEl.textContent = `[${ts}] ${msg}\n` + logEl.textContent;
+  }
+
+  function loadPersistedInputs() {
+    const savedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
+    const savedIModelId = localStorage.getItem(STORAGE_KEY_IMODEL);
+    if (savedToken) tokenEl.value = savedToken;
+    if (savedIModelId) imodelIdEl.value = savedIModelId;
+  }
+
+  function persistInputs() {
+    const token = tokenEl.value.trim();
+    const imodelId = imodelIdEl.value.trim();
+    if (token) {
+      localStorage.setItem(STORAGE_KEY_TOKEN, token);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_TOKEN);
+    }
+    if (imodelId) {
+      localStorage.setItem(STORAGE_KEY_IMODEL, imodelId);
+    } else {
+      localStorage.removeItem(STORAGE_KEY_IMODEL);
+    }
+  }
+
+  function getAuthHeaders() {
+    let token = tokenEl.value.trim();
+    if (!token) throw new Error("Access token is required.");
+    if (/^Bearer\s+/i.test(token)) {
+      token = token.replace(/^Bearer\s+/i, "").trim();
+    }
+    return {
+      "Authorization": `Bearer ${token}`,
+      "Accept": "application/vnd.bentley.itwin-platform.v2+json"
+    };
+  }
+
+  function getIModelId() {
+    const id = imodelIdEl.value.trim();
+    if (!id) throw new Error("iModel id is required.");
+    return id;
+  }
+
+  async function fetchJson(url, options) {
+    const res = await fetch(url, options);
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { /* keep as null */ }
+
+    if (!res.ok) {
+      const errMsg = data?.error?.message || data?.message || text || `HTTP ${res.status}`;
+      throw new Error(`Request failed: ${res.status} ${res.statusText} — ${errMsg}`);
+    }
+    return data;
+  }
+
+  async function getBriefcaseDetails(imodelId, briefcaseId) {
+    const headers = getAuthHeaders();
+    const url = `https://api.bentley.com/imodels/${encodeURIComponent(imodelId)}/briefcases/${encodeURIComponent(briefcaseId)}`;
+    log(`GET ${url}`);
+    return await fetchJson(url, { method: "GET", headers });
+  }
+
+  async function getUserDetailsFromOwnerLink(ownerHref) {
+    if (!ownerHref) return null;
+    const headers = getAuthHeaders();
+    log(`GET ${ownerHref}`);
+    return await fetchJson(ownerHref, { method: "GET", headers });
+  }
+
+  function extractBriefcase(details) {
+    if (!details || typeof details !== "object") return null;
+    if (details.briefcase && typeof details.briefcase === "object") return details.briefcase;
+    if (details.data?.briefcase && typeof details.data.briefcase === "object") return details.data.briefcase;
+    return details;
+  }
+
+  function extractOwnerHref(details, briefcase) {
+    return details?._links?.owner?.href
+      || briefcase?._links?.owner?.href
+      || details?.links?.owner?.href
+      || briefcase?.links?.owner?.href
+      || null;
+  }
+
+  // Follows _links.next.href if present (maxPages safety)
+  async function getAllLocks(imodelId) {
+    const headers = getAuthHeaders();
+    let url = `https://api.bentley.com/imodels/${encodeURIComponent(imodelId)}/locks`;
+    const all = [];
+    const maxPages = 20;
+
+    for (let i = 0; i < maxPages; i++) {
+      log(`GET ${url}`);
+      const data = await fetchJson(url, { method: "GET", headers });
+      const pageLocks = data?.locks || [];
+      all.push(...pageLocks);
+
+      const nextHref = data?._links?.next?.href;
+      // Some APIs include next even when you're on last page; guard by comparing hrefs
+      if (!nextHref || nextHref === url) break;
+
+      url = nextHref;
+    }
+
+    return all;
+  }
+
+  function uniqueSortedBriefcaseIds(locks) {
+    const ids = new Set();
+    for (const l of locks) {
+      if (typeof l?.briefcaseId === "number") ids.add(l.briefcaseId);
+    }
+    return [...ids].sort((a,b) => a - b);
+  }
+
+  function buildReleasePayload(lock, exclusiveOnly = false) {
+    // Release by setting lockLevel = "none" for all objectIds (keep as list).
+    // If exclusiveOnly, include only objectIds from lockLevel === "exclusive".
+    const allObjectIds = [];
+    for (const lo of (lock.lockedObjects || [])) {
+      if (exclusiveOnly && lo?.lockLevel !== "exclusive") continue;
+      for (const id of (lo.objectIds || [])) allObjectIds.push(id);
+    }
+    // De-dup while preserving order
+    const seen = new Set();
+    const deduped = allObjectIds.filter(x => (seen.has(x) ? false : (seen.add(x), true)));
+
+    return {
+      briefcaseId: lock.briefcaseId,
+      lockedObjects: deduped.length ? [{ lockLevel: "none", objectIds: deduped }] : [{ lockLevel: "none", objectIds: [] }]
+    };
+  }
+
+  function pretty(obj) {
+    return JSON.stringify(obj, null, 2);
+  }
+
+  function getOwnerSummary(userDetails) {
+    const user = userDetails?.user || userDetails;
+    const displayName = user?.displayName || user?.name || user?.email || user?.id;
+    return displayName || "(owner not found)";
+  }
+
+  function updateBriefcaseOptions() {
+    const currentValue = briefcaseSelect.value;
+    const ids = [...locksByBriefcase.keys()].sort((a, b) => a - b);
+    if (ids.length === 0) {
+      briefcaseSelect.innerHTML = `<option value="">(no locks returned)</option>`;
+      return;
+    }
+
+    const optionsHtml = ids.map(id => {
+      const owner = briefcaseOwnerById.get(id);
+      const ownerSummary = owner ? getOwnerSummary(owner) : "owner pending";
+      return `<option value="${id}">${id} - ${ownerSummary}</option>`;
+    }).join("");
+
+    briefcaseSelect.innerHTML = `<option value="">(select a briefcase)</option>` + optionsHtml;
+    if (currentValue && [...briefcaseSelect.options].some(o => o.value === currentValue)) {
+      briefcaseSelect.value = currentValue;
+    }
+  }
+
+  function refreshBriefcaseInfo() {
+    const val = briefcaseSelect.value;
+    if (!val) {
+      briefcaseInfoEl.textContent = "(select a briefcase to view details)";
+      return;
+    }
+
+    const briefcaseId = Number(val);
+    const details = briefcaseDetailsById.get(briefcaseId);
+    const owner = briefcaseOwnerById.get(briefcaseId);
+
+    const info = {
+      briefcaseDetails: details || "(not loaded)",
+      owner: owner || "(not loaded)"
+    };
+    briefcaseInfoEl.textContent = pretty(info);
+  }
+
+  function refreshPayloadFromSelection() {
+    const val = briefcaseSelect.value;
+    if (!val) return;
+
+    const briefcaseId = Number(val);
+    const lock = locksByBriefcase.get(briefcaseId);
+
+    if (!lock) {
+      payloadEl.value = "";
+      return;
+    }
+
+    if (modeEl.value === "release") {
+      payloadEl.value = pretty(buildReleasePayload(lock, false));
+      payloadEl.disabled = true; // release mode: still "editable text box"? you can toggle Raw to edit.
+    } else if (modeEl.value === "releaseExclusive") {
+      payloadEl.value = pretty(buildReleasePayload(lock, true));
+      payloadEl.disabled = true; // release mode: still "editable text box"? you can toggle Raw to edit.
+    } else {
+      // raw mode: pre-fill with existing lock snapshot (NOT necessarily valid PATCH; user can edit)
+      payloadEl.value = pretty({
+        briefcaseId: lock.briefcaseId,
+        lockedObjects: lock.lockedObjects || []
+      });
+      payloadEl.disabled = false;
+    }
+  }
+
+  async function onLoadLocks() {
+    try {
+      btnLoad.disabled = true;
+      btnPatch.disabled = true;
+      briefcaseSelect.disabled = true;
+      modeEl.disabled = true;
+
+      locksByBriefcase.clear();
+      briefcaseDetailsById.clear();
+      briefcaseOwnerById.clear();
+      briefcaseSelect.innerHTML = `<option value="">(loading...)</option>`;
+      payloadEl.value = "";
+      briefcaseInfoEl.textContent = "(loading briefcase details...)";
+
+      const imodelId = getIModelId();
+      const locks = await getAllLocks(imodelId);
+
+      // Build map (if API returns multiple entries per briefcase, merge them)
+      const temp = new Map(); // briefcaseId -> {briefcaseId, lockedObjects: [...]}
+      for (const l of locks) {
+        const id = l?.briefcaseId;
+        if (typeof id !== "number") continue;
+        if (!temp.has(id)) temp.set(id, { briefcaseId: id, lockedObjects: [] });
+
+        const bucket = temp.get(id);
+        const los = Array.isArray(l.lockedObjects) ? l.lockedObjects : [];
+        bucket.lockedObjects.push(...los);
+      }
+
+      // Optionally de-dupe lockedObjects entries by lockLevel and objectIds
+      // (Keep it simple: merge objectIds per lockLevel)
+      locksByBriefcase = new Map();
+      for (const [id, merged] of temp.entries()) {
+        const byLevel = new Map(); // lockLevel -> Set(objectIds)
+        for (const lo of merged.lockedObjects) {
+          const lvl = lo?.lockLevel || "unknown";
+          if (!byLevel.has(lvl)) byLevel.set(lvl, new Set());
+          const set = byLevel.get(lvl);
+          for (const oid of (lo?.objectIds || [])) set.add(oid);
+        }
+        const normalized = [];
+        for (const [lvl, set] of byLevel.entries()) {
+          normalized.push({ lockLevel: lvl, objectIds: [...set] });
+        }
+        locksByBriefcase.set(id, { briefcaseId: id, lockedObjects: normalized });
+      }
+
+      const ids = [...locksByBriefcase.keys()].sort((a,b) => a-b);
+
+      if (ids.length === 0) {
+        updateBriefcaseOptions();
+        log("No locks returned for this iModel.");
+        return;
+      }
+
+      updateBriefcaseOptions();
+      briefcaseSelect.disabled = false;
+      modeEl.disabled = false;
+      btnPatch.disabled = false;
+
+      log(`Loaded locks for ${ids.length} briefcase(s). Fetching briefcase/user details...`);
+
+      for (const id of ids) {
+        try {
+          const details = await getBriefcaseDetails(imodelId, id);
+          const briefcase = extractBriefcase(details);
+          briefcaseDetailsById.set(id, briefcase || details);
+          const ownerHref = extractOwnerHref(details, briefcase);
+          if (!ownerHref) {
+            log(`WARN: Briefcase ${id} has no owner link in response.`);
+            updateBriefcaseOptions();
+            refreshBriefcaseInfo();
+            continue;
+          }
+          const owner = await getUserDetailsFromOwnerLink(ownerHref);
+          if (owner) briefcaseOwnerById.set(id, owner);
+        } catch (e) {
+          log(`WARN: Briefcase ${id} details/owner lookup failed: ${e.message}`);
+        }
+        updateBriefcaseOptions();
+        refreshBriefcaseInfo();
+      }
+
+      log(`Briefcase details lookup complete.`);
+    } catch (e) {
+      log(`ERROR: ${e.message}`);
+      alert(e.message);
+    } finally {
+      btnLoad.disabled = false;
+    }
+  }
+
+  async function onPatch() {
+    try {
+      btnPatch.disabled = true;
+
+      const imodelId = getIModelId();
+      const headers = {
+        ...getAuthHeaders(),
+        "Content-Type": "application/json"
+      };
+
+      let bodyObj;
+      try {
+        bodyObj = JSON.parse(payloadEl.value || "{}");
+      } catch (e) {
+        throw new Error("Payload is not valid JSON.");
+      }
+
+      // Minimal guardrails
+      if (typeof bodyObj.briefcaseId !== "number") {
+        throw new Error("Payload must include numeric briefcaseId.");
+      }
+      if (!Array.isArray(bodyObj.lockedObjects)) {
+        throw new Error("Payload must include lockedObjects as an array.");
+      }
+
+      const url = `https://api.bentley.com/imodels/${encodeURIComponent(imodelId)}/locks`;
+      log(`PATCH ${url}`);
+      const resp = await fetchJson(url, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(bodyObj)
+      });
+
+      log("PATCH success. Response:");
+      log(pretty(resp));
+
+      // Refresh locks after update, so UI reflects latest
+      log("Refreshing locks after PATCH...");
+      await onLoadLocks();
+
+      // Reselect briefcase if still present
+      const id = String(bodyObj.briefcaseId);
+      if ([...briefcaseSelect.options].some(o => o.value === id)) {
+        briefcaseSelect.value = id;
+        refreshPayloadFromSelection();
+      }
+    } catch (e) {
+      log(`ERROR: ${e.message}`);
+      alert(e.message);
+    } finally {
+      btnPatch.disabled = false;
+    }
+  }
+
+  btnLoad.addEventListener("click", onLoadLocks);
+  briefcaseSelect.addEventListener("change", refreshPayloadFromSelection);
+  modeEl.addEventListener("change", refreshPayloadFromSelection);
+  btnPatch.addEventListener("click", onPatch);
+
+  briefcaseSelect.addEventListener("change", refreshBriefcaseInfo);
+  modeEl.addEventListener("change", refreshBriefcaseInfo);
+
+  tokenEl.addEventListener("input", persistInputs);
+  imodelIdEl.addEventListener("input", persistInputs);
+
+  loadPersistedInputs();
+
+  window.addEventListener("load", () => {
+    const cards = Array.from(document.querySelectorAll(".card"));
+    cards.forEach(card => card.classList.add("reveal"));
+  });
+
+  // UX: if user edits token/imodel, don’t auto-clear, but disable actions until they load again is overkill.
+})();
+</script>
+</body>
+</html>
