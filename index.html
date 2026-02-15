@@ -108,6 +108,7 @@
         <label>Access Token (Bearer)</label>
         <input id="token" type="text" placeholder="eyJhbGciOi..." />
         <div class="hint">Required scope: <code>itwin-platform</code>. To release locks you typically need <code>imodels_manage</code>. You can get an access token at: <a href="https://developer.bentley.com/apis/imodels-v2/operations/update-imodel-locks/" target="_blank" rel="noreferrer">iModels v2 Update Locks</a>.</div>
+
       </div>
       <div class="col">
         <label>iModel Id</label>
@@ -117,6 +118,15 @@
       <div style="flex:0 0 auto; align-self:flex-end">
         <button id="btnLoad" class="primary">Load Locks</button>
       </div>
+    </div>
+    <div class="row" style="margin-top:10px; align-items:center">
+      <label style="display:flex; align-items:center; gap:8px; margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--ink)">
+        <input id="persistInputs" type="checkbox" checked />
+        Remember Access Token and iModel Id in this browser
+      </label>
+    </div>
+    <div id="localOnlyLink" class="hint" style="display:none; margin-top:8px">
+      <div> <a href="start:D:\Personal\Projects\PyScripts\iTwinCLCopyAccessToken.bat" target="_blank" rel="noreferrer">Copy Access Token to clipboard</a></div>
     </div>
   </div>
 
@@ -176,6 +186,8 @@
 
   const tokenEl = el("token");
   const imodelIdEl = el("imodelId");
+  const persistInputsEl = el("persistInputs");
+  const localOnlyLinkEl = el("localOnlyLink");
   const btnLoad = el("btnLoad");
   const briefcaseSelect = el("briefcaseSelect");
   const payloadEl = el("payload");
@@ -186,6 +198,7 @@
 
   const STORAGE_KEY_TOKEN = "locksViewer.accessToken";
   const STORAGE_KEY_IMODEL = "locksViewer.imodelId";
+  const STORAGE_KEY_PERSIST = "locksViewer.persistInputs";
 
   // Stored GET result: Map briefcaseId -> lock object
   let locksByBriefcase = new Map();
@@ -199,13 +212,28 @@
   }
 
   function loadPersistedInputs() {
+    const savedPersistSetting = localStorage.getItem(STORAGE_KEY_PERSIST);
+    if (savedPersistSetting !== null) {
+      persistInputsEl.checked = savedPersistSetting === "true";
+    }
+
+    if (!persistInputsEl.checked) return;
+
     const savedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
     const savedIModelId = localStorage.getItem(STORAGE_KEY_IMODEL);
     if (savedToken) tokenEl.value = savedToken;
     if (savedIModelId) imodelIdEl.value = savedIModelId;
   }
 
-  function persistInputs() {
+  function persistInputsToStorage() {
+    localStorage.setItem(STORAGE_KEY_PERSIST, String(persistInputsEl.checked));
+
+    if (!persistInputsEl.checked) {
+      localStorage.removeItem(STORAGE_KEY_TOKEN);
+      localStorage.removeItem(STORAGE_KEY_IMODEL);
+      return;
+    }
+
     const token = tokenEl.value.trim();
     const imodelId = imodelIdEl.value.trim();
     if (token) {
@@ -236,6 +264,12 @@
     const id = imodelIdEl.value.trim();
     if (!id) throw new Error("iModel id is required.");
     return id;
+  }
+
+  function configureLocalOnlyLink() {
+    if (window.location.protocol === "file:") {
+      localOnlyLinkEl.style.display = "block";
+    }
   }
 
   async function fetchJson(url, options) {
@@ -559,10 +593,12 @@
   briefcaseSelect.addEventListener("change", refreshBriefcaseInfo);
   modeEl.addEventListener("change", refreshBriefcaseInfo);
 
-  tokenEl.addEventListener("input", persistInputs);
-  imodelIdEl.addEventListener("input", persistInputs);
+  tokenEl.addEventListener("input", persistInputsToStorage);
+  imodelIdEl.addEventListener("input", persistInputsToStorage);
+  persistInputsEl.addEventListener("change", persistInputsToStorage);
 
   loadPersistedInputs();
+  configureLocalOnlyLink();
 
   window.addEventListener("load", () => {
     const cards = Array.from(document.querySelectorAll(".card"));
