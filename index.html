@@ -95,7 +95,7 @@
 <body>
   <div class="topbar">
     <h2 style="margin:0">iModel Locks (per Briefcase)</h2>
-    <span class="pill">Uses iModels v2: GET /imodels/{id}/locks, PATCH /imodels/{id}/locks</span>
+    <span id="endpointPill" class="pill">Environment: Production · Uses iModels v2: GET /imodels/{id}/locks, PATCH /imodels/{id}/locks</span>
   </div>
 
   <div class="card warn">
@@ -107,8 +107,16 @@
       <div class="col">
         <label>Access Token (Bearer)</label>
         <input id="token" type="text" placeholder="eyJhbGciOi..." />
-        <div class="hint">Required scope: <code>itwin-platform</code>. To release locks you typically need <code>imodels_manage</code>. You can get an access token at: <a href="https://developer.bentley.com/apis/imodels-v2/operations/update-imodel-locks/" target="_blank" rel="noreferrer">iModels v2 Update Locks</a>.</div>
+        <div class="hint">Required scope: <code>itwin-platform</code>. To release locks you typically need <code>imodels_manage</code>. You can get an access token at: <a id="apiDocLink" href="https://developer.bentley.com/apis/imodels-v2/operations/update-imodel-locks/" target="_blank" rel="noreferrer">iModels v2 Update Locks</a>.</div>
 
+      </div>
+      <div class="col" style="max-width: 220px;">
+        <label>Environment</label>
+        <select id="environment">
+          <option value="prod">Production</option>
+          <option value="qa">QA</option>
+        </select>
+        <div class="hint">Switches API base and docs links between prod and QA.</div>
       </div>
       <div class="col">
         <label>iModel Id</label>
@@ -186,8 +194,11 @@
 
   const tokenEl = el("token");
   const imodelIdEl = el("imodelId");
+  const environmentEl = el("environment");
   const persistInputsEl = el("persistInputs");
   const localOnlyLinkEl = el("localOnlyLink");
+  const apiDocLinkEl = el("apiDocLink");
+  const endpointPillEl = el("endpointPill");
   const btnLoad = el("btnLoad");
   const briefcaseSelect = el("briefcaseSelect");
   const payloadEl = el("payload");
@@ -199,6 +210,7 @@
   const STORAGE_KEY_TOKEN = "locksViewer.accessToken";
   const STORAGE_KEY_IMODEL = "locksViewer.imodelId";
   const STORAGE_KEY_PERSIST = "locksViewer.persistInputs";
+  const STORAGE_KEY_ENV = "locksViewer.environment";
 
   // Stored GET result: Map briefcaseId -> lock object
   let locksByBriefcase = new Map();
@@ -221,8 +233,12 @@
 
     const savedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
     const savedIModelId = localStorage.getItem(STORAGE_KEY_IMODEL);
+    const savedEnvironment = localStorage.getItem(STORAGE_KEY_ENV);
     if (savedToken) tokenEl.value = savedToken;
     if (savedIModelId) imodelIdEl.value = savedIModelId;
+    if (savedEnvironment === "qa" || savedEnvironment === "prod") {
+      environmentEl.value = savedEnvironment;
+    }
   }
 
   function persistInputsToStorage() {
@@ -236,6 +252,7 @@
 
     const token = tokenEl.value.trim();
     const imodelId = imodelIdEl.value.trim();
+    const environment = environmentEl.value === "qa" ? "qa" : "prod";
     if (token) {
       localStorage.setItem(STORAGE_KEY_TOKEN, token);
     } else {
@@ -246,6 +263,25 @@
     } else {
       localStorage.removeItem(STORAGE_KEY_IMODEL);
     }
+    localStorage.setItem(STORAGE_KEY_ENV, environment);
+  }
+
+  function getEnvironment() {
+    return environmentEl.value === "qa" ? "qa" : "prod";
+  }
+
+  function getApiBaseUrl() {
+    return getEnvironment() === "qa" ? "https://qa-api.bentley.com" : "https://api.bentley.com";
+  }
+
+  function getDocsBaseUrl() {
+    return getEnvironment() === "qa" ? "https://qa-developer.bentley.com" : "https://developer.bentley.com";
+  }
+
+  function configureEnvironmentUI() {
+    const envName = getEnvironment() === "qa" ? "QA" : "Production";
+    endpointPillEl.textContent = `Environment: ${envName} · Uses iModels v2: GET /imodels/{id}/locks, PATCH /imodels/{id}/locks`;
+    apiDocLinkEl.href = `${getDocsBaseUrl()}/apis/imodels-v2/operations/update-imodel-locks/`;
   }
 
   function getAuthHeaders() {
@@ -287,7 +323,7 @@
 
   async function getBriefcaseDetails(imodelId, briefcaseId) {
     const headers = getAuthHeaders();
-    const url = `https://api.bentley.com/imodels/${encodeURIComponent(imodelId)}/briefcases/${encodeURIComponent(briefcaseId)}`;
+    const url = `${getApiBaseUrl()}/imodels/${encodeURIComponent(imodelId)}/briefcases/${encodeURIComponent(briefcaseId)}`;
     log(`GET ${url}`);
     return await fetchJson(url, { method: "GET", headers });
   }
@@ -317,7 +353,7 @@
   // Follows _links.next.href if present (maxPages safety)
   async function getAllLocks(imodelId) {
     const headers = getAuthHeaders();
-    let url = `https://api.bentley.com/imodels/${encodeURIComponent(imodelId)}/locks`;
+    let url = `${getApiBaseUrl()}/imodels/${encodeURIComponent(imodelId)}/locks`;
     const all = [];
     const maxPages = 20;
 
@@ -556,7 +592,7 @@
         throw new Error("Payload must include lockedObjects as an array.");
       }
 
-      const url = `https://api.bentley.com/imodels/${encodeURIComponent(imodelId)}/locks`;
+      const url = `${getApiBaseUrl()}/imodels/${encodeURIComponent(imodelId)}/locks`;
       log(`PATCH ${url}`);
       const resp = await fetchJson(url, {
         method: "PATCH",
@@ -596,8 +632,14 @@
   tokenEl.addEventListener("input", persistInputsToStorage);
   imodelIdEl.addEventListener("input", persistInputsToStorage);
   persistInputsEl.addEventListener("change", persistInputsToStorage);
+  environmentEl.addEventListener("change", () => {
+    persistInputsToStorage();
+    configureEnvironmentUI();
+    log(`Environment switched to ${getEnvironment() === "qa" ? "QA" : "Production"}.`);
+  });
 
   loadPersistedInputs();
+  configureEnvironmentUI();
   configureLocalOnlyLink();
 
   window.addEventListener("load", () => {
