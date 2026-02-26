@@ -165,6 +165,12 @@
 
     <div style="margin-top:12px">
       <label>Request Body (editable)</label>
+      <div class="row" style="margin-bottom:8px; align-items:center">
+        <div style="flex:0 0 auto">
+          <button id="btnPasteInstanceIds" type="button" disabled>Paste Instance Ids from Clipboard</button>
+        </div>
+        <div id="pasteInstanceIdsStatus" class="hint" style="margin:0">Available in Edit raw request body mode.</div>
+      </div>
       <textarea id="payload" spellcheck="false" placeholder="{ ... }"></textarea>
       <div class="hint">
         Default “Release” payload groups object ids by lockLevel and sets all to <code>"none"</code>.
@@ -202,6 +208,8 @@
   const btnLoad = el("btnLoad");
   const briefcaseSelect = el("briefcaseSelect");
   const payloadEl = el("payload");
+  const btnPasteInstanceIds = el("btnPasteInstanceIds");
+  const pasteInstanceIdsStatusEl = el("pasteInstanceIdsStatus");
   const btnPatch = el("btnPatch");
   const modeEl = el("mode");
   const logEl = el("log");
@@ -403,6 +411,77 @@
     return JSON.stringify(obj, null, 2);
   }
 
+  function updatePasteInstanceIdsUiState() {
+    const isRawMode = modeEl.value === "raw";
+    btnPasteInstanceIds.disabled = !isRawMode;
+    pasteInstanceIdsStatusEl.textContent = isRawMode
+      ? "Paste newline-separated instance ids into objectIds."
+      : "Available in Edit raw request body mode.";
+  }
+
+  function parseInstanceIdsFromClipboardText(text) {
+    return String(text || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .map((line) => line.replace(/[,;]+$/g, "").trim())
+      .map((line) => line.replace(/^['"`]+|['"`]+$/g, ""))
+      .filter(Boolean);
+  }
+
+  function applyInstanceIdsToRawPayload(instanceIds) {
+    if (!instanceIds.length) {
+      throw new Error("No instance ids found in clipboard.");
+    }
+
+    let bodyObj;
+    try {
+      bodyObj = JSON.parse(payloadEl.value || "{}");
+    } catch {
+      throw new Error("Request Body is not valid JSON.");
+    }
+
+    if (!Array.isArray(bodyObj.lockedObjects)) {
+      bodyObj.lockedObjects = [];
+    }
+
+    if (!bodyObj.lockedObjects.length || typeof bodyObj.lockedObjects[0] !== "object" || bodyObj.lockedObjects[0] === null) {
+      bodyObj.lockedObjects = [{ lockLevel: "none", objectIds: [] }];
+    }
+
+    if (bodyObj.lockedObjects[0].lockLevel !== "none") {
+      bodyObj.lockedObjects[0].lockLevel = "none";
+    }
+
+    if (!Array.isArray(bodyObj.lockedObjects[0].objectIds)) {
+      bodyObj.lockedObjects[0].objectIds = [];
+    }
+
+    bodyObj.lockedObjects[0].objectIds = [...new Set(instanceIds)];
+    payloadEl.value = pretty(bodyObj);
+  }
+
+  async function onPasteInstanceIds() {
+    try {
+      if (modeEl.value !== "raw") {
+        throw new Error("Switch mode to Edit raw request body first.");
+      }
+      if (!navigator.clipboard || typeof navigator.clipboard.readText !== "function") {
+        throw new Error("Clipboard read is unavailable in this browser context.");
+      }
+
+      const text = await navigator.clipboard.readText();
+      const instanceIds = parseInstanceIdsFromClipboardText(text);
+      applyInstanceIdsToRawPayload(instanceIds);
+
+      pasteInstanceIdsStatusEl.textContent = `Inserted ${instanceIds.length} instance id(s) into objectIds.`;
+      log(`Inserted ${instanceIds.length} instance id(s) from clipboard into raw payload.`);
+    } catch (e) {
+      pasteInstanceIdsStatusEl.textContent = `Paste failed: ${e.message}`;
+      log(`ERROR: Paste instance ids failed: ${e.message}`);
+      alert(e.message);
+    }
+  }
+
   function getOwnerSummary(userDetails) {
     const user = userDetails?.user || userDetails;
     const displayName = user?.displayName || user?.name || user?.email || user?.id;
@@ -473,6 +552,8 @@
       });
       payloadEl.disabled = false;
     }
+
+    updatePasteInstanceIdsUiState();
   }
 
   async function onLoadLocks() {
@@ -624,7 +705,9 @@
   btnLoad.addEventListener("click", onLoadLocks);
   briefcaseSelect.addEventListener("change", refreshPayloadFromSelection);
   modeEl.addEventListener("change", refreshPayloadFromSelection);
+  modeEl.addEventListener("change", updatePasteInstanceIdsUiState);
   btnPatch.addEventListener("click", onPatch);
+  btnPasteInstanceIds.addEventListener("click", onPasteInstanceIds);
 
   briefcaseSelect.addEventListener("change", refreshBriefcaseInfo);
   modeEl.addEventListener("change", refreshBriefcaseInfo);
@@ -641,6 +724,7 @@
   loadPersistedInputs();
   configureEnvironmentUI();
   configureLocalOnlyLink();
+  updatePasteInstanceIdsUiState();
 
   window.addEventListener("load", () => {
     const cards = Array.from(document.querySelectorAll(".card"));
