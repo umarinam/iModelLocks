@@ -545,11 +545,8 @@
       payloadEl.value = pretty(buildReleasePayload(lock, true));
       payloadEl.disabled = true; // release mode: still "editable text box"? you can toggle Raw to edit.
     } else {
-      // raw mode: pre-fill with existing lock snapshot (NOT necessarily valid PATCH; user can edit)
-      payloadEl.value = pretty({
-        briefcaseId: lock.briefcaseId,
-        lockedObjects: lock.lockedObjects || []
-      });
+      // raw mode: pre-fill editable JSON where all selected briefcase locks are set to "none"
+      payloadEl.value = pretty(buildReleasePayload(lock, false));
       payloadEl.disabled = false;
     }
 
