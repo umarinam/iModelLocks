@@ -1,7 +1,7 @@
 # iModel Locks Viewer / Releaser
 
 A web-based tool for viewing and managing iModel briefcase locks per the iModels v2 API. This single-page application provides a user-friendly interface to query lock status and release locks for specific briefcases.
-
+Demo at: https://umarinam.github.io/iModelLocks/
 ## Features
 
 - **View Locks**: Fetch and display all locks for a given iModel, organized by briefcase
